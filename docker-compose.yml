@@ -1,0 +1,73 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ct_workflow_db
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_USER: ct_workflow
+      POSTGRES_PASSWORD: ct_secure_2026
+      POSTGRES_DB: ct_brain_workflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ct_workflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache and Real-time
+  redis:
+    image: redis:7-alpine
+    container_name: ct_workflow_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ct_workflow_backend
+    ports:
+      - "8877:8000"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ct_workflow_frontend
+    ports:
+      - "5173:3000"
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
